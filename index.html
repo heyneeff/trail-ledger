@@ -208,6 +208,7 @@ small.hint{color:var(--fg-dim); font-size:.7rem;}
       <button class="menuitem" onclick="openMapPanel()">4. Look at the Map</button>
       <button class="menuitem" onclick="openPacePanel()">5. Change Pace or Rations</button>
       <button class="menuitem" id="huntBtn" onclick="goHunt()">6. Hunt for Food</button>
+      <button class="menuitem" onclick="openAlmanacPanel()">7. Read the Almanac</button>
     </div>
 
     <h2 class="section">The Ledger Entries</h2>
@@ -225,6 +226,18 @@ small.hint{color:var(--fg-dim); font-size:.7rem;}
       </div>
       <canvas id="huntCanvas" width="640" height="300"></canvas>
       <button onclick="endHunt(true)">Leave the Field</button>
+    </div>
+  </div>
+
+  <div id="screen-raft" class="screen">
+    <h1 style="font-size:1.4rem;">The Columbia</h1>
+    <p class="flavor">Move the mouse to steer the raft. The rocks do not move for anyone.</p>
+    <div id="huntWrap">
+      <div class="statline" style="width:100%; max-width:640px;">
+        <span>Hits: <b id="raftHits">0</b></span>
+        <span>Time: <b id="raftTime">20</b>s</span>
+      </div>
+      <canvas id="raftCanvas" width="640" height="300"></canvas>
     </div>
   </div>
 
@@ -256,9 +269,14 @@ small.hint{color:var(--fg-dim); font-size:.7rem;}
 <script>
 /* ---------- data ---------- */
 const OCCUPATIONS=[
-  {name:"Mortician", cash:1600, mult:1, blurb:"You've buried enough neighbors to afford real oxen. Small comfort, and a full purse."},
-  {name:"Carny", cash:800, mult:2, blurb:"You ran the ring-toss until the ring started tossing back. Modest funds, better odds."},
-  {name:"Cultist", cash:400, mult:3, blurb:"You gave everything to Mother for provisions. She said this was 'necessary.' Least money, most to prove."}
+  {name:"Banker", cash:1600, mult:1, perk:null, blurb:"You financed other people's ruin from a safe distance. No special skill out here — just money, which is its own kind of skill."},
+  {name:"Merchant", cash:1400, mult:1.2, perk:null, blurb:"You've marked up everything you've ever sold, including, technically, this trip."},
+  {name:"Saddlemaker", cash:1200, mult:1.4, perk:null, blurb:"Good with leather, useless against the supernatural. Still, a well-made saddle has outlived worse curses."},
+  {name:"Doctor", cash:1000, mult:1.6, perk:"doctor", blurb:"The sick and injured recover more often, and less horribly, with you around. You still can't explain what you're treating half the time."},
+  {name:"Carpenter", cash:800, mult:1.8, perk:"mechanic", blurb:"You can read a wagon's grain like a face. Broken wheels, axles, and tongues get fixed more often, spare part or not."},
+  {name:"Blacksmith", cash:700, mult:2, perk:"mechanic", blurb:"Iron does what you tell it to, mostly. Broken wheels, axles, and tongues get fixed more often, spare part or not."},
+  {name:"Farmer", cash:600, mult:2.4, perk:"farmer", blurb:"You know oxen better than most people know their own family. Yours sicken and die less often for it."},
+  {name:"Teacher", cash:500, mult:3, perk:null, blurb:"You corrected the almanac's grammar and it corrected you back. Least money on the trail, most to prove."}
 ];
 const DEFAULT_NAMES=["Mothgirl","Uncle Static","Sister Marrow","The Third Son","Grandpa Wick","Old Hollow","Cousin Gristle","Widow Thistle","Bethany-Not-Bethany","Nameless Infant"];
 const MONTHS=[
@@ -282,9 +300,9 @@ const LANDMARKS=[
   {name:"Fort Hall", dist:1230, type:"fort"},
   {name:"Snake River", dist:1340, type:"river"},
   {name:"Fort Boise", dist:1430, type:"fort"},
-  {name:"Whitman Mission", dist:1550, type:"history", history:"A real mission stood near here, run by Marcus and Narcissa Whitman, who preached to and pressured the Cayuse people on whose land it sat while wagons like this one kept coming through. In 1847 a measles epidemic carried in by settlers killed roughly half the Cayuse in the area — the Whitmans' own children survived it; Cayuse children mostly did not. When the mission failed to stop the dying, Cayuse men killed the Whitmans and eleven others. The United States answered with a war, and years later hanged five Cayuse men for it after a trial few historians now call fair. Both the epidemic and the reprisal are part of the record. This entry has no joke attached to it."},
+  {name:"Whitman Mission", dist:1550, type:"history", history:"A real mission stood near here, run by Marcus and Narcissa Whitman, who preached to and pressured the Cayuse people on whose land it sat while wagons like this one kept coming through. In 1847 a measles epidemic carried in by settlers killed roughly half the Cayuse in the area — the Whitmans' own children survived it; Cayuse children mostly did not. When the mission failed to stop the dying, Cayuse men killed the Whitmans and eleven others. The United States answered with a war, and years later hanged five Cayuse men for it after a trial few historians now call fair. Both the epidemic and the reprisal are part of the record.<br><br>One exchange from the period survives, a settler's account of a conversation with a Cayuse man: 'You ask about the Whitman massacre. I ask you why Doctor Whitman's medicine did not cure my people's children. Many caught the measles from the strangers. Why did the medicine poison our children and cure the children of white people?' No answer to it was recorded. This entry has no joke attached to it."},
   {name:"Blue Mountains", dist:1650, type:"landmark", flavor:"Something keeps pace with the wagon just beyond the treeline. It is patient."},
-  {name:"The Dalles (Columbia River)", dist:1780, type:"river"},
+  {name:"The Dalles (Columbia River)", dist:1780, type:"columbia"},
   {name:"The Bloom (Willamette Valley)", dist:1900, type:"end"}
 ];
 const ILLNESSES=[
@@ -316,7 +334,7 @@ let travelTimer=null;
 
 function freshState(){
   return {
-    occIdx:0, cash:0, mult:1, month:2,
+    occIdx:0, cash:0, mult:1, perk:null, month:2,
     party:[], // {name,health,illness,alive}
     inv:{food:0, oxen:0, clothes:0, ammo:0, wheels:0, axles:0, tongues:0, medicine:0},
     pace:"steady", rations:"filling",
@@ -370,13 +388,15 @@ function goSetup(){
   renderMonths();
 }
 
+function fmtMult(m){return (m%1===0?m:m.toFixed(1))+"x";}
 function renderOcc(){
   const wrap=document.getElementById("occList");
   wrap.innerHTML="";
   OCCUPATIONS.forEach((o,i)=>{
     const d=document.createElement("div");
     d.className="card occ"+(i===state.occIdx?" selected":"");
-    d.innerHTML="<b>"+o.name+"</b> — "+money(o.cash)+", "+o.mult+"x score<br><span class='flavor'>"+o.blurb+"</span>";
+    d.style.padding=".6rem .8rem";
+    d.innerHTML="<b>"+o.name+"</b> — "+money(o.cash)+", "+fmtMult(o.mult)+" score<br><span class='flavor' style='font-size:.82rem;'>"+o.blurb+"</span>";
     d.onclick=()=>{state.occIdx=i; renderOcc();};
     wrap.appendChild(d);
   });
@@ -417,7 +437,7 @@ function goStore(fromSetup){
       state.party.push({name:v||DEFAULT_NAMES[i], health:100, illness:null, alive:true});
     }
     const occ=OCCUPATIONS[state.occIdx];
-    state.cash=occ.cash; state.mult=occ.mult;
+    state.cash=occ.cash; state.mult=occ.mult; state.perk=occ.perk;
     storeCtx="initial";
     document.getElementById("storeTitle").textContent="Outfitting at the Hollow";
     document.getElementById("storeBlurb").textContent="Spend what you have. You will not be able to buy oxen again once the mud starts.";
@@ -584,6 +604,18 @@ function openPacePanel(){
   activePanel="pace";
   openModal("Pace &amp; Rations",buildPaceHTML(),[{label:"Done",primary:true,onClick:()=>{activePanel=null;}}]);
 }
+function buildAlmanacHTML(){
+  return "<div style='display:flex;flex-direction:column;gap:.8rem;font-size:.85rem;'>"+
+    "<div><b>The Plains Nations</b><br>Pawnee, Arapaho, Cheyenne, and Lakota bands hunted bison across the land this trail cuts through, most still at peace with emigrants this early on — a peace resting almost entirely on the fact that wagon traffic hadn't yet become the flood it would within a decade.</div>"+
+    "<div><b>Disease, Both Ways</b><br>Typhoid, cholera, and dysentery killed settlers by the thousands on this road. They killed Native peoples at far higher rates still — measles, smallpox, and cholera carried in by exactly this kind of traffic wiped out entire villages with no prior exposure and no immunity to any of it.</div>"+
+    "<div><b>Forts Built on Trade, Then Not</b><br>Bridger, Laramie, Hall, and Boise all began as fur-trading posts run in partnership with the nations whose land they sat on. Within a generation, the same westward traffic those forts supplied ended most of those partnerships, along with the land they were built on.</div>"+
+    "<div><b>Salmon Country</b><br>Near the Blue Mountains and Fort Boise, the Cayuse, Nez Percé, and Umatilla built their lives around the salmon runs of the Snake and Columbia watershed — a food system thousands of years older than this road, and one the road's traffic began disrupting almost immediately.</div>"+
+  "</div>";
+}
+function openAlmanacPanel(){
+  activePanel="almanac";
+  openModal("The Almanac",buildAlmanacHTML(),[{label:"Back",primary:true,onClick:()=>{activePanel=null;}}]);
+}
 function treat(i){
   const p=state.party[i];
   if(state.inv.medicine<=0 || !p.illness) return;
@@ -699,13 +731,14 @@ function rollIllness(){
   if(state.rations==="meager") chance+=0.04;
   if(state.pace==="relentless") chance+=0.05;
   if(state.inv.food<=0) chance+=0.12;
+  const isDoctor=state.perk==="doctor";
   state.party.forEach(p=>{
     if(!p.alive) return;
     if(p.illness){
       const def=ILLNESSES.find(i=>i.name===p.illness);
-      p.health-=def.dmg;
-      if(Math.random()<def.recover){
-        log(p.name+" shakes off "+p.illness+". Whatever it was, it has moved on to someone else's ledger.");
+      p.health-=Math.round(def.dmg*(isDoctor?0.7:1));
+      if(Math.random()<def.recover+(isDoctor?0.15:0)){
+        log(p.name+" shakes off "+p.illness+(isDoctor?" — the doctor's care helped more than either of them expected.":". Whatever it was, it has moved on to someone else's ledger."));
         p.illness=null;
       }
     } else if(Math.random()<chance){
@@ -732,21 +765,32 @@ function checkDeaths(){
   });
 }
 
+function partBreakEvent(partKey,partLabel){
+  const isMechanic=state.perk==="mechanic";
+  if(isMechanic && Math.random()<0.5){
+    return "A "+partLabel+" cracks, but it's fixed on the spot before it can finish breaking. Some trades are worth their price in more than money.";
+  }
+  if(state.inv[partKey]>0){ state.inv[partKey]--; return "A "+partLabel+" splits on ground that was, by any account, flat. A spare replaces it before nightfall."; }
+  state.day++;
+  return "A "+partLabel+" splits and there is no spare to replace it. A full day is lost fashioning something that will have to do.";
+}
 const EVENTS=[
-  {w:10,f:()=>{
-    if(state.inv.wheels>0){ state.inv.wheels--; return "A wheel splits on ground that was, by any account, flat. A spare replaces it before nightfall."; }
-    state.day++;
-    return "A wheel splits and there is no spare to replace it. A full day is lost fashioning something that will have to do.";
-  }},
-  {w:8,f:()=>{return "The axle groans all night in a voice that is almost words.";}},
+  {w:10,f:()=>partBreakEvent("wheels","wheel")},
+  {w:8,f:()=>partBreakEvent("axles","axle")},
+  {w:6,f:()=>partBreakEvent("tongues","tongue")},
   {w:8,f:()=>{const lost=ri(5,20); state.inv.food=Math.max(0,state.inv.food-lost); return "An ox wanders off and returns without having eaten anything, staring at the middle distance. "+lost+" lb of food spoils overnight regardless.";}},
-  {w:6,f:()=>{if(state.inv.oxen>1){state.inv.oxen--; return "An ox lies down and does not get up. No wound. No cause. One less ox.";} return "An ox lies down, then, after a long moment, gets back up.";}},
+  {w:6,f:()=>{
+    if(state.perk==="farmer" && Math.random()<0.6) return "An ox goes down in the traces, and by every rule of the trail should be dead by morning. It isn't. Nobody can explain why except the one member who's spent a lifetime with oxen.";
+    if(state.inv.oxen>1){ state.inv.oxen--; return "An ox lies down and does not get up. No wound. No cause. One less ox."; }
+    return "An ox lies down, then, after a long moment, gets back up.";
+  }},
   {w:8,f:()=>{const lost=Math.min(state.cash,ri(5,25)); state.cash-=lost; return "Something goes through the supplies in the night and leaves "+money(lost)+" in its place, as if in trade.";}},
   {w:7,f:()=>{return "A heavy fog sits on the trail. Somewhere inside it, someone calls a name that is almost, but not quite, one of the party's.";}},
   {w:6,f:()=>{const gained=ri(10,40); state.inv.food+=gained; return "An abandoned wagon is found, its provisions untouched. A note inside is signed with a name from the party — nobody admits to writing it. "+gained+" lb of food taken.";}},
   {w:5,f:()=>{const p=pick(state.party.filter(m=>m.alive)); if(p){p.health-=10; return p.name+" is startled by their own reflection in a puddle. It didn't blink in time.";} return "Nothing of note, for once.";}},
   {w:4,f:()=>{state.inv.medicine+=1; return "A charm is found tied to a fencepost. It hums faintly. Kept, for later.";}},
-  {w:4,f:()=>{return "Crows follow the wagon for three miles exactly, then peel off all at once.";}}
+  {w:4,f:()=>{return "Crows follow the wagon for three miles exactly, then peel off all at once.";}},
+  {w:3,f:()=>{const extra=ri(4,9); state.distance+=extra; return "Someone mentions the Donner Party, entirely to make a point about pace. It works — the wagon covers "+extra+" extra miles today without anyone admitting why they're suddenly in a hurry.";}}
 ];
 function rollEvent(){
   if(Math.random()>0.16) return;
@@ -764,6 +808,25 @@ function handleLandmark(lm){
   else if(lm.type==="fort") openFort(lm);
   else if(lm.type==="landmark") openLandmarkFlavor(lm);
   else if(lm.type==="history") openHistoryModal(lm);
+  else if(lm.type==="columbia") openColumbiaChoice(lm);
+}
+function openColumbiaChoice(lm){
+  openModal(lm.name,
+    "<p class='flavor'>The last stretch: raft the Columbia's rapids for free, or pay the Barlow Toll Road and walk it instead — ninety rough but dry miles around Mount Hood, cut in 1845 by a man named Barlow who saw a mountain and thought 'toll booth.'</p>",
+    [
+      {label:"Raft the Rapids",primary:true,onClick:()=>startRaft(lm)},
+      {label:"Take the Barlow Toll Road ($8)",onClick:()=>{
+        if(state.cash>=8){
+          state.cash-=8;
+          log("The Barlow Toll Road: eight dollars and ninety miles of steep, dusty switchbacks around Mount Hood, but dry land the whole way.");
+          advancePastLandmark(lm.name);
+        } else {
+          log("There isn't eight dollars for the Barlow Road. The Columbia it is, like it or not.");
+          startRaft(lm);
+        }
+      }}
+    ]
+  );
 }
 function openHistoryModal(lm){
   openModal(lm.name,"<p>"+lm.history+"</p>",[
@@ -780,17 +843,35 @@ function openLandmarkFlavor(lm){
     {label:"Move On",primary:true,onClick:()=>advancePastLandmark(lm.name)}
   ]);
 }
+const RIVER_NATIONS={
+  "Kansas River":"a Kansa man",
+  "Big Blue River":"a Kansa guide",
+  "Green River":"a Shoshone guide",
+  "Snake River":"a Shoshone and Bannock guide"
+};
+const RIVER_HISTORY={
+  "Kansas River":"The reservations near this crossing hold the Lenni Lenape, Kaskaskia, Kickapoo, Miami, Peoria, and Shawnee — nations originally from hundreds of miles east, relocated here by the same government now waving this wagon through their land a second time."
+};
+let riverHistoryShown={};
 function openRiver(lm){
+  if(RIVER_HISTORY[lm.name] && !riverHistoryShown[lm.name]){
+    riverHistoryShown[lm.name]=true;
+    log(RIVER_HISTORY[lm.name]);
+  }
   const depth=pick(["shallow","middling","deep"]);
   const current=pick(["slow","brisk","violent"]);
+  const buttons=[
+    {label:"Ford It",onClick:()=>resolveCrossing(lm,"ford",depth,current)},
+    {label:"Caulk & Float",onClick:()=>resolveCrossing(lm,"float",depth,current)},
+    {label:"Pay the Ferry ("+money(12)+")",onClick:()=>resolveCrossing(lm,"ferry",depth,current)}
+  ];
+  if(RIVER_NATIONS[lm.name]){
+    buttons.push({label:"Hire a Guide (3 clothing)",onClick:()=>resolveCrossing(lm,"guide",depth,current)});
+  }
+  buttons.push({label:"Wait a Day",onClick:()=>resolveCrossing(lm,"wait",depth,current)});
   openModal(lm.name,
     "<p class='flavor'>The water runs "+depth+" and "+current+". It does not look eager to let go of anything it takes.</p>",
-    [
-      {label:"Ford It",onClick:()=>resolveCrossing(lm,"ford",depth,current)},
-      {label:"Caulk & Float",onClick:()=>resolveCrossing(lm,"float",depth,current)},
-      {label:"Pay the Ferry ("+money(12)+")",onClick:()=>resolveCrossing(lm,"ferry",depth,current)},
-      {label:"Wait a Day",onClick:()=>resolveCrossing(lm,"wait",depth,current)}
-    ]
+    buttons
   );
 }
 function resolveCrossing(lm,choice,depth,current){
@@ -810,6 +891,15 @@ function resolveCrossing(lm,choice,depth,current){
       msg="The ferryman does not speak the whole crossing, and does not ask for names. Safe passage.";
     } else {
       msg="There isn't enough in the purse for the ferry. The river will have to be dealt with directly.";
+      openModal(lm.name,"<p class='flavor'>"+msg+"</p>",[{label:"Choose Again",primary:true,onClick:()=>openRiver(lm)}]);
+      return;
+    }
+  } else if(choice==="guide"){
+    if(state.inv.clothes>=3){
+      state.inv.clothes-=3;
+      msg=RIVER_NATIONS[lm.name]+" takes the wagon across for three sets of clothing — sharp trader, fair price, no losses. The current doesn't get a say in it.";
+    } else {
+      msg="Three sets of clothing, and there aren't three to give. No guide today.";
       openModal(lm.name,"<p class='flavor'>"+msg+"</p>",[{label:"Choose Again",primary:true,onClick:()=>openRiver(lm)}]);
       return;
     }
@@ -960,6 +1050,70 @@ function endHunt(manual){
   log("A day spent hunting brings back "+Math.round(state.huntMeat)+" lb of meat, none of it quite the color it should be.");
   show("screen-travel");
   renderTravel();
+}
+
+/* ---------- rafting the columbia ---------- */
+let raftCtx=null;
+function startRaft(lm){
+  show("screen-raft");
+  const canvas=document.getElementById("raftCanvas");
+  const ctx=canvas.getContext("2d");
+  raftCtx={canvas,ctx,rocks:[],raftX:canvas.width/2,hits:0,timeLeft:20,running:true,lm};
+  canvas.onmousemove=(e)=>{
+    const rect=canvas.getBoundingClientRect();
+    raftCtx.raftX=Math.max(20,Math.min(canvas.width-20,(e.clientX-rect.left)*(canvas.width/rect.width)));
+  };
+  document.getElementById("raftHits").textContent="0";
+  document.getElementById("raftTime").textContent="20";
+  raftCtx.interval=setInterval(raftTick,1000);
+  requestAnimationFrame(raftFrame);
+}
+function raftFrame(){
+  if(!raftCtx||!raftCtx.running) return;
+  const {ctx,canvas}=raftCtx;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--panel");
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(Math.random()<0.06) raftCtx.rocks.push({x:ri(20,canvas.width-20),y:-20});
+  const raftY=canvas.height-40;
+  ctx.font="26px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  raftCtx.rocks.forEach(rock=>{
+    rock.y+=4.5;
+    if(!rock.hit){
+      ctx.fillText("\u{1FAA8}",rock.x,rock.y);
+      const d=Math.hypot(rock.x-raftCtx.raftX,rock.y-raftY);
+      if(d<24){ rock.hit=true; raftCtx.hits++; document.getElementById("raftHits").textContent=raftCtx.hits; }
+    }
+  });
+  raftCtx.rocks=raftCtx.rocks.filter(r=>r.y<canvas.height+20 && !r.hit);
+  ctx.font="30px serif";
+  ctx.fillText("\u{1F6F6}",raftCtx.raftX,raftY);
+  requestAnimationFrame(raftFrame);
+}
+function raftTick(){
+  raftCtx.timeLeft--;
+  document.getElementById("raftTime").textContent=raftCtx.timeLeft;
+  if(raftCtx.timeLeft<=0) endRaft();
+}
+function endRaft(){
+  if(!raftCtx||!raftCtx.running) return;
+  raftCtx.running=false;
+  clearInterval(raftCtx.interval);
+  const lm=raftCtx.lm;
+  if(raftCtx.hits>=3){
+    const lostFood=Math.round(state.inv.food*0.35);
+    state.inv.food=Math.max(0,state.inv.food-lostFood);
+    const p=pick(state.party.filter(m=>m.alive));
+    if(p) p.health-=ri(15,30);
+    log("The raft takes rock after rock and finally rolls in the current. "+lostFood+" lb of food goes into the Columbia, and "+(p?p.name:"the party")+" comes up gasping on the far bank.");
+    checkDeaths();
+  } else if(raftCtx.hits>0){
+    log("The raft takes "+raftCtx.hits+" hard hits on the way down but holds together.");
+  } else {
+    log("A clean run down the Columbia. Not a scrape on the raft.");
+  }
+  show("screen-travel");
+  advancePastLandmark(lm.name);
 }
 
 /* ---------- end game ---------- */
