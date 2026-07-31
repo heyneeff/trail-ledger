@@ -513,6 +513,7 @@ function startTravel_init(){
     "<p>This ground is not empty, and has not been for a very long time. Just a few years before this ledger opens, the United States forced tens of thousands of Cherokee, Muscogee, Choctaw, Chickasaw, and Seminole people from their homelands in the removals now called the Trail of Tears — thousands died on the march. The road ahead runs through the homelands of the Kansa, Pawnee, Osage, Shoshone, Cayuse, and other nations, bound by treaties the United States would not keep for long. None of that is a story this ledger can joke its way past. It is simply what is true before a single mile is walked.</p>",
     [{label:"Begin the Ledger",primary:true,onClick:()=>{
       log("The purse is "+money(state.cash)+". The oxen have already decided they resent this.");
+      log("Independence sent the wagon off properly: a ferry canceled for a captain too hungover to steer it, and at least one departing traveler who traded away his own pantaloons for one last round of whiskey.");
     }}]
   );
 }
@@ -710,6 +711,10 @@ function advanceOneDay(){
       checkDeaths();
       openModal("Empty Stores","<p class='flavor'>There is nothing left to eat. Hunting, or the shelves of the next fort, are the only way back from this — the road will not wait for a plan.</p>",[{label:"Press On",primary:true}]);
     } else {
+      if(Math.random()<0.15){
+        state.inv.food+=ri(4,10);
+        log("Someone's dog does not survive the general realization that there is nothing left to eat. Nobody enjoys the meal. Everyone eats it anyway.");
+      }
       checkDeaths();
     }
   }
@@ -790,7 +795,39 @@ const EVENTS=[
   {w:5,f:()=>{const p=pick(state.party.filter(m=>m.alive)); if(p){p.health-=10; return p.name+" is startled by their own reflection in a puddle. It didn't blink in time.";} return "Nothing of note, for once.";}},
   {w:4,f:()=>{state.inv.medicine+=1; return "A charm is found tied to a fencepost. It hums faintly. Kept, for later.";}},
   {w:4,f:()=>{return "Crows follow the wagon for three miles exactly, then peel off all at once.";}},
-  {w:3,f:()=>{const extra=ri(4,9); state.distance+=extra; return "Someone mentions the Donner Party, entirely to make a point about pace. It works — the wagon covers "+extra+" extra miles today without anyone admitting why they're suddenly in a hurry.";}}
+  {w:3,f:()=>{const extra=ri(4,9); state.distance+=extra; return "Someone mentions the Donner Party, entirely to make a point about pace. It works — the wagon covers "+extra+" extra miles today without anyone admitting why they're suddenly in a hurry.";}},
+  {w:7,f:()=>{
+    const p=pick(state.party.filter(m=>m.alive));
+    if(!p) return "Nothing of note, for once.";
+    p.health-=ri(8,18);
+    return p.name+" decides today is the day to finally learn how the rifle works. It is not that day. "+p.name+" takes a graze and a very long lecture from everyone else in the party.";
+  }},
+  {w:5,f:()=>{return "A rifle bounces loose from the wagon bed, hits the ground, and goes off entirely on its own initiative. Nobody is hurt. The oxen are never quite the same.";}},
+  {w:5,f:()=>{return "A wheel very nearly takes someone's foot off along with the ground beneath it — the kind of ordinary, everyday near-miss that kills more people out here than anything supernatural does. This time, luck holds.";}},
+  {w:5,f:()=>{
+    const sick=state.party.filter(m=>m.alive&&m.illness);
+    const p=sick.length?pick(sick):null;
+    if(p){
+      p.health+=6;
+      return "The trail cure for everything is whiskey, opium, or both, administered without much concern for which. "+p.name+"'s fever breaks. The whiskey does not get credit either way.";
+    }
+    return "Someone breaks out the trail medicine chest just in case: cornbread, bacon, and whiskey. Mostly whiskey. Nobody's even sick today, but it seems a shame to waste the ritual.";
+  }},
+  {w:4,f:()=>{return "No firewood to be found, so the fire gets built out of dried buffalo chips instead. It burns fine. Dinner tastes like dinner. Mostly.";}},
+  {w:4,f:()=>{
+    const p=pick(state.party.filter(m=>m.alive));
+    if(p){ p.health=Math.min(100,p.health+6); return "Someone produces a slaughtered ox's stomach, and the party spends an hour taking turns headbutting it and bouncing off. It ends when "+p.name+"'s head gets stuck. Worth it, everyone agrees."; }
+    return "Nothing of note, for once.";
+  }},
+  {w:3,f:()=>{
+    state.party.filter(m=>m.alive).forEach(p=>p.health=Math.min(100,p.health+4));
+    return "A wedding happens in the woods nearby — no cake, no candles, just a crowd and whatever's in reach. The whole party turns out, and for one evening nobody mentions the road at all.";
+  }},
+  {w:4,f:()=>{
+    const p=pick(state.party.filter(m=>m.alive));
+    if(p){ p.health-=ri(6,14); return p.name+" gets caught sneaking into someone's tent after dark and takes a load of buckshot for the trouble. You win some, you lose some.";}
+    return "Nothing of note, for once.";
+  }}
 ];
 function rollEvent(){
   if(Math.random()>0.16) return;
@@ -921,7 +958,8 @@ function resolveCrossing(lm,choice,depth,current){
   openModal(lm.name,"<p class='flavor'>"+msg+"</p>",[{label:"Continue",primary:true,onClick:()=>advancePastLandmark(lm.name)}]);
 }
 const FORT_RUMORS={
-  "Fort Laramie":"Talk at the fort is all Kit Carson — Frémont's reports have made him famous back east, a guide and scout dressed up as a folk hero. Nobody around the fire wants the part of the story where fame like that gets built on burned villages and starved winters. They just want the part with the buckskin and the rifle.",
+  "Fort Kearney":"Just past the fort gates is Dobytown — six saloons and an establishment the locals call, with a straight face, the Dirty Woman Ranch. One miner's diary passed around the fire reads: 'Gambling & gambling rules the camp. Dance tonight. Men danced in women's clothing to represent the sex.' The whole party pretends not to be curious. The whole party is curious.",
+  "Fort Laramie":"Talk at the fort is all Kit Carson — Frémont's reports have made him famous back east, a guide and scout dressed up as a folk hero. Nobody around the fire wants the part of the story where fame like that gets built on burned villages and starved winters. They just want the part with the buckskin and the rifle. The fort surgeon, meanwhile, is apparently treating a rather personal complaint with boiling water. Nobody asks for details. Nobody needs to.",
   "Fort Bridger":"The fort's namesake, Jim Bridger, is said to be close by — a trader and teller of tall tales who married into the Shoshone and Ute families whose land this post now sits on, and who profits from every wagon that follows this road through it. Nobody at the fire can quite decide if that makes him a friend to the people here or the machinery of their dispossession wearing a friendlier face. Possibly both. The ledger declines to resolve it for you.",
   "Fort Boise":"A trapper passing through tells of a mountain man out east called 'Liver-Eating' Johnston — the story goes he ate the livers of Crow warriors killed in a long, real war of revenge that lasted the better part of two decades. How much of the liver-eating is embellishment and how much is Johnston's own bragging is genuinely disputed; the killing war itself is not. The men around the fire repeat the goriest version like it's a compliment. That part isn't disputed at all."
 };
