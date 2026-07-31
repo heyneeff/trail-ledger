@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Trail Ledger</title>
+<style>
+:root{
+  --bg:#040f09; --panel:#071a0f; --fg:#3dffa0; --fg-bright:#c9ffe4; --fg-dim:#1f8f5c;
+  --border:#1f8f5c; --wound:#ff5f4a; --amber:#ffbe55;
+}
+*{box-sizing:border-box;}
+html,body{background:var(--bg);}
+body{
+  margin:0; color:var(--fg);
+  font-family:'Courier New',ui-monospace,'SF Mono',Menlo,monospace;
+  font-size:15px; line-height:1.5; min-height:100vh;
+  position:relative;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:5;
+  background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,.28) 3px);
+}
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:5;
+  background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%);
+}
+.crt{animation:flicker 6s infinite;}
+@keyframes flicker{
+  0%,100%{opacity:1;} 92%{opacity:1;} 93%{opacity:.94;} 94%{opacity:1;} 97%{opacity:.97;} 98%{opacity:1;}
+}
+.ledger{
+  max-width:700px; margin:1.4rem auto 3rem; padding:0 1.2rem;
+  position:relative;
+}
+.termbar{
+  display:flex; justify-content:space-between; align-items:center;
+  border:1px solid var(--fg-dim); border-bottom:none; padding:.35rem .7rem;
+  font-size:.72rem; letter-spacing:.08em; color:var(--fg-dim); text-transform:uppercase;
+}
+.termbar .dot{width:8px; height:8px; border-radius:50%; background:var(--wound); display:inline-block; margin-right:.4rem; animation:blink 1.6s step-start infinite;}
+@keyframes blink{50%{opacity:.15;}}
+.termbody{border:1px solid var(--fg-dim); border-top:2px solid var(--fg-dim); padding:1.6rem 1.4rem 2rem;}
+h1,h2,h3{font-family:inherit; font-weight:700; text-wrap:balance; margin:0;}
+h1{
+  font-size:1.7rem; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--fg); text-align:center; text-shadow:0 0 6px rgba(61,255,160,.55), 0 0 14px rgba(61,255,160,.25);
+}
+h2.section{
+  font-size:.78rem; text-transform:uppercase; letter-spacing:.14em;
+  color:var(--fg); margin:1.6rem 0 .5rem;
+  border-bottom:1px dashed var(--fg-dim); padding-bottom:.35rem; font-weight:700;
+}
+h2.section::before{content:"> ";}
+.subtitle{
+  text-align:center; color:var(--fg-dim); font-size:.85rem; margin-top:.5rem; letter-spacing:.02em;
+}
+.screen{display:none;}
+.screen.active{display:block;}
+.floppy{width:88px; height:88px; margin:1.3rem auto; display:block; filter:drop-shadow(0 0 6px rgba(61,255,160,.4));}
+.cursor{display:inline-block; width:.6em; background:var(--fg); animation:blink 1s step-start infinite;}
+p{margin:.5rem 0;}
+.flavor{color:var(--fg-dim);}
+.row{display:flex; gap:.6rem; flex-wrap:wrap; align-items:center;}
+.row.between{justify-content:space-between;}
+label{display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; color:var(--fg-dim); margin-bottom:.25rem;}
+input[type=text],select{
+  background:var(--panel); border:1px solid var(--fg-dim); color:var(--fg);
+  font-family:inherit; font-size:.9rem; padding:.45rem .5rem; width:100%;
+}
+input[type=text]:focus,select:focus{outline:none; border-color:var(--fg);}
+button{
+  appearance:none; background:var(--panel); border:1px solid var(--fg-dim);
+  color:var(--fg); font-family:inherit; font-size:.78rem;
+  text-transform:uppercase; letter-spacing:.06em; padding:.6rem .9rem;
+  cursor:pointer; transition:background .1s,color .1s;
+}
+button:hover:not(:disabled){background:var(--fg); color:var(--bg); text-shadow:none;}
+button:disabled{opacity:.35; cursor:not-allowed;}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+button.primary{background:var(--fg); color:var(--bg); border-color:var(--fg); font-weight:700;}
+button.primary:hover:not(:disabled){background:var(--fg-bright); border-color:var(--fg-bright);}
+.card{background:var(--panel); border:1px solid var(--fg-dim); padding:1rem 1.1rem; margin:.7rem 0;}
+.occ{cursor:pointer;}
+.occ.selected{border-color:var(--fg); box-shadow:inset 0 0 0 1px var(--fg);}
+.namegrid{display:grid; grid-template-columns:1fr 1fr; gap:.6rem;}
+@media (max-width:520px){.namegrid{grid-template-columns:1fr;}}
+table{width:100%; border-collapse:collapse; font-size:.85rem;}
+td,th{padding:.3rem .2rem; text-align:left; border-bottom:1px solid var(--fg-dim);}
+th{color:var(--fg-dim); font-weight:400; text-transform:uppercase; font-size:.68rem; letter-spacing:.06em;}
+.bar{height:7px; background:var(--panel); width:100%; position:relative; overflow:hidden; border:1px solid var(--fg-dim);}
+.bar>i{display:block; height:100%; transition:width .4s;}
+.st-good>i{background:var(--fg);}
+.st-fair>i{background:var(--amber);}
+.st-poor>i{background:#e08a3a;}
+.st-vpoor>i{background:var(--wound); opacity:.85;}
+.st-crit>i{background:var(--wound);}
+.st-dead>i{background:var(--fg-dim); width:100% !important;}
+.dead-row{opacity:.5; text-decoration:line-through;}
+.dagger{color:var(--wound); margin-right:.3rem;}
+.menu{display:flex; flex-direction:column; gap:.4rem; margin:1rem 0;}
+.menuitem{width:100%; text-align:left; padding:.7rem .9rem;}
+.statbar{border:1px solid var(--fg-dim); background:var(--panel); padding:.6rem .8rem; margin-bottom:.3rem;}
+.statbar .row.between{font-size:.78rem; color:var(--fg-dim);}
+.statbar .row.between span:last-child{color:var(--fg);}
+#log{
+  height:200px; overflow-y:auto; background:var(--panel); border:1px solid var(--fg-dim);
+  padding:.6rem .8rem; font-size:.82rem;
+}
+#log .line{margin:.15rem 0; animation:fadein .3s ease;}
+#log .line .day{color:var(--fg-bright); font-weight:700;}
+@keyframes fadein{from{opacity:0; transform:translateY(2px);} to{opacity:1;}}
+.statline{display:flex; justify-content:space-between; font-size:.8rem; color:var(--fg-dim); flex-wrap:wrap; gap:.4rem 1rem;}
+.tally{display:grid; grid-template-columns:repeat(2,1fr); gap:.35rem .9rem; font-size:.85rem;}
+.tally div{display:flex; justify-content:space-between; border-bottom:1px dotted var(--fg-dim); padding-bottom:.15rem;}
+#overlay{
+  position:fixed; inset:0; background:rgba(0,10,5,.7); display:none;
+  align-items:center; justify-content:center; padding:1.2rem; z-index:10;
+}
+#overlay.active{display:flex;}
+#modal{
+  background:var(--bg); max-width:480px; width:100%; padding:1.3rem 1.4rem;
+  border:1px solid var(--fg); box-shadow:0 0 0 4px var(--bg), 0 0 24px rgba(61,255,160,.25);
+  max-height:85vh; overflow-y:auto;
+}
+#modal h2{font-size:1.05rem; text-transform:uppercase; letter-spacing:.06em; margin-bottom:.6rem; color:var(--fg-bright); text-shadow:0 0 6px rgba(61,255,160,.5);}
+#modal-buttons{display:flex; gap:.5rem; flex-wrap:wrap; margin-top:1rem;}
+canvas{background:var(--panel); border:1px solid var(--fg-dim); max-width:100%; touch-action:none; cursor:crosshair;}
+#huntWrap{display:flex; flex-direction:column; align-items:center; gap:.6rem;}
+.glitch{animation:glitch 1.6s ease-out 1;}
+@keyframes glitch{
+  0%{text-shadow:0 0 6px rgba(61,255,160,.55);}
+  10%{text-shadow:2px 0 0 var(--wound), -2px 0 0 var(--fg-bright);}
+  20%{text-shadow:-2px 0 0 var(--wound), 2px 0 0 var(--fg-bright);}
+  30%{text-shadow:0 0 6px rgba(61,255,160,.55);}
+  100%{text-shadow:0 0 6px rgba(61,255,160,.55);}
+}
+@media (prefers-reduced-motion:reduce){
+  .glitch{animation:none;} #log .line{animation:none;} .bar>i{transition:none;} .crt{animation:none;} .termbar .dot,.cursor{animation:none;}
+}
+.hidden{display:none !important;}
+.center{text-align:center;}
+small.hint{color:var(--fg-dim); font-size:.7rem;}
+</style>
+</head>
+<body>
+
+
+<div class="ledger crt">
+  <div class="termbar"><span><span class="dot"></span>A:\TRAIL\LEDGER.EXE</span><span>184_</span></div>
+  <div class="termbody">
+
+  <div id="screen-title" class="screen active">
+    <h1 class="glitch">The Trail Ledger</h1>
+    <p class="subtitle">an account of the 184_ expedition, kept faithfully (mostly) by the party's own hand</p>
+    <svg class="floppy" viewBox="0 0 100 100" role="img" aria-label="floppy disk">
+      <polygon points="8,8 78,8 92,22 92,92 8,92" fill="var(--panel)" stroke="var(--fg)" stroke-width="3"/>
+      <rect x="26" y="8" width="34" height="26" fill="var(--bg)" stroke="var(--fg)" stroke-width="2.5"/>
+      <rect x="32" y="8" width="6" height="18" fill="var(--fg)"/>
+      <rect x="18" y="46" width="64" height="34" fill="var(--bg)" stroke="var(--fg-dim)" stroke-width="2"/>
+      <text x="50" y="67" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--fg)">184_</text>
+    </svg>
+    <p class="flavor center">Five souls. One wagon. A road that does not always go where the map says it does.<br>Someone must keep the record. It has fallen to you.<span class="cursor">&nbsp;</span></p>
+    <div class="row" style="justify-content:center; margin-top:1.2rem;">
+      <button class="primary" onclick="goSetup()">Insert Disk to Begin</button>
+    </div>
+  </div>
+
+  <div id="screen-setup" class="screen">
+    <h1 style="font-size:1.5rem;">First Entries</h1>
+    <h2 class="section">Your Trade</h2>
+    <div id="occList"></div>
+    <h2 class="section">The Party (five, always five)</h2>
+    <div class="namegrid" id="nameGrid"></div>
+    <h2 class="section">Month of Departure</h2>
+    <div class="row" id="monthList"></div>
+    <p class="flavor" id="monthBlurb"></p>
+    <div class="row" style="justify-content:flex-end; margin-top:1rem;">
+      <button class="primary" onclick="goStore(true)">Proceed to Outfitting</button>
+    </div>
+  </div>
+
+  <div id="screen-store" class="screen">
+    <h1 style="font-size:1.5rem;" id="storeTitle">Outfitting</h1>
+    <p class="flavor" id="storeBlurb"></p>
+    <div class="statline"><span>Purse: <b id="storeCash"></b></span><span id="storeContext"></span></div>
+    <div class="card">
+      <table id="storeTable"></table>
+    </div>
+    <p class="flavor" id="storeWarn"></p>
+    <div class="row" style="justify-content:flex-end;">
+      <button class="primary" id="storeDoneBtn" onclick="finishStore()">Take to the Road</button>
+    </div>
+  </div>
+
+  <div id="screen-travel" class="screen">
+    <h1 style="font-size:1.4rem;" id="travelHeading">The Road</h1>
+    <div class="statbar">
+      <div class="row between"><span id="dateLine"></span><span id="distLine"></span></div>
+      <div class="bar" style="margin:.4rem 0;"><i id="progressBar" style="width:0%; background:var(--fg);"></i></div>
+      <div class="row between"><span id="weatherLine"></span><span id="conditionLine"></span></div>
+    </div>
+
+    <div class="menu">
+      <button class="menuitem primary" id="travelBtn" onclick="toggleTravel()">1. Continue on the Trail</button>
+      <button class="menuitem" onclick="openSuppliesPanel()">2. Check Supplies</button>
+      <button class="menuitem" onclick="openPartyPanel()">3. Check the Party</button>
+      <button class="menuitem" onclick="openMapPanel()">4. Look at the Map</button>
+      <button class="menuitem" onclick="openPacePanel()">5. Change Pace or Rations</button>
+      <button class="menuitem" id="huntBtn" onclick="goHunt()">6. Hunt for Food</button>
+    </div>
+
+    <h2 class="section">The Ledger Entries</h2>
+    <div id="log"></div>
+  </div>
+
+  <div id="screen-hunt" class="screen">
+    <h1 style="font-size:1.4rem;">The Hunt</h1>
+    <p class="flavor" id="huntFlavor">Something moves at the treeline. It is not always what it looks like.</p>
+    <div id="huntWrap">
+      <div class="statline" style="width:100%; max-width:640px;">
+        <span>Shot: <b id="huntAmmo"></b></span>
+        <span>Meat: <b id="huntMeat"></b> lb</span>
+        <span>Time: <b id="huntTime"></b>s</span>
+      </div>
+      <canvas id="huntCanvas" width="640" height="300"></canvas>
+      <button onclick="endHunt(true)">Leave the Field</button>
+    </div>
+  </div>
+
+  <div id="screen-end" class="screen">
+    <h1 style="font-size:1.6rem;" id="endTitle"></h1>
+    <p class="flavor center" id="endFlavor"></p>
+    <div class="card">
+      <div class="tally" id="endTally"></div>
+    </div>
+    <p id="endHistory" style="font-size:.85rem; border-top:1px dashed var(--fg-dim); padding-top:.8rem; margin-top:.8rem;"></p>
+    <p class="center" style="margin-top:1rem;"><b id="endRank"></b></p>
+    <div class="row" style="justify-content:center; margin-top:1rem;">
+      <button class="primary" onclick="location.reload()">Begin a New Ledger</button>
+    </div>
+  </div>
+
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="modal">
+    <h2 id="modal-title"></h2>
+    <div id="modal-body"></div>
+    <div id="modal-buttons"></div>
+  </div>
+</div>
+
+
+<script>
+/* ---------- data ---------- */
+const OCCUPATIONS=[
+  {name:"Mortician", cash:1600, mult:1, blurb:"You've buried enough neighbors to afford real oxen. Small comfort, and a full purse."},
+  {name:"Carny", cash:800, mult:2, blurb:"You ran the ring-toss until the ring started tossing back. Modest funds, better odds."},
+  {name:"Cultist", cash:400, mult:3, blurb:"You gave everything to Mother for provisions. She said this was 'necessary.' Least money, most to prove."}
+];
+const DEFAULT_NAMES=["Mothgirl","Uncle Static","Sister Marrow","The Third Son","Grandpa Wick","Old Hollow","Cousin Gristle","Widow Thistle","Bethany-Not-Bethany","Nameless Infant"];
+const MONTHS=[
+  {name:"March", blurb:"The mud has not yet dried. Early wheels sink early."},
+  {name:"April", blurb:"A common start. The road is merely damp, not yet hostile."},
+  {name:"May", blurb:"The favored month. Even the crows seem unbothered."},
+  {name:"June", blurb:"Later than wise. The mountains will want their toll before winter."},
+  {name:"July", blurb:"Very late. Something in the almanac has been crossed out in red ink."}
+];
+const LANDMARKS=[
+  {name:"The Hollow (Independence)", dist:0, type:"start"},
+  {name:"Kansas River", dist:100, type:"river"},
+  {name:"Fort Kearney", dist:300, type:"fort"},
+  {name:"Chimney Rock", dist:520, type:"landmark", flavor:"It leans further than it did last year. It leans toward you, specifically."},
+  {name:"Fort Laramie", dist:620, type:"fort"},
+  {name:"Independence Rock", dist:800, type:"landmark", flavor:"Names are carved into it going back decades. You find one that matches your own."},
+  {name:"South Pass", dist:920, type:"landmark", flavor:"The air thins. So, briefly, does the veil."},
+  {name:"Green River", dist:1000, type:"river"},
+  {name:"Fort Bridger", dist:1060, type:"fort"},
+  {name:"Soda Springs", dist:1150, type:"landmark", flavor:"The water fizzes. It should not fizz. You drink it anyway."},
+  {name:"Fort Hall", dist:1230, type:"fort"},
+  {name:"Snake River", dist:1340, type:"river"},
+  {name:"Fort Boise", dist:1430, type:"fort"},
+  {name:"Whitman Mission", dist:1550, type:"history", history:"A real mission stood near here, run by Marcus and Narcissa Whitman, who preached to and pressured the Cayuse people on whose land it sat while wagons like this one kept coming through. In 1847 a measles epidemic carried in by settlers killed roughly half the Cayuse in the area — the Whitmans' own children survived it; Cayuse children mostly did not. When the mission failed to stop the dying, Cayuse men killed the Whitmans and eleven others. The United States answered with a war, and years later hanged five Cayuse men for it after a trial few historians now call fair. Both the epidemic and the reprisal are part of the record. This entry has no joke attached to it."},
+  {name:"Blue Mountains", dist:1650, type:"landmark", flavor:"Something keeps pace with the wagon just beyond the treeline. It is patient."},
+  {name:"The Dalles (Columbia River)", dist:1780, type:"river"},
+  {name:"The Bloom (Willamette Valley)", dist:1900, type:"end"}
+];
+const ILLNESSES=[
+  {name:"The Runs from Beyond", dmg:6, recover:.22},
+  {name:"The Weeping Sickness", dmg:11, recover:.10},
+  {name:"Fever Dreams", dmg:8, recover:.16},
+  {name:"The Spotted Curse", dmg:7, recover:.18},
+  {name:"Soul-Drain", dmg:4, recover:.30},
+  {name:"Shattered by Unseen Hands", dmg:9, recover:.14},
+  {name:"Kissed by the Serpent", dmg:12, recover:.12}
+];
+const EPITAPHS=[
+  "Here lies {n}. The road took what it wanted and left the rest of us to walk on.",
+  "{n} — taken by {c}. The wagon rolls without them, and does not slow.",
+  "In memory of {n}, who saw something out past the firelight and would not say what.",
+  "{n}. {c}. The ledger records it; the ledger does not explain it.",
+  "{n} is not lost. {n} is simply no longer walking in the direction we are."
+];
+const RANKS=[
+  {min:6000,label:"Living Legend of the Hollow Road"},
+  {min:4000,label:"Marked, But You Made It"},
+  {min:2000,label:"Barely Blooded Survivor"},
+  {min:0,label:"You Are Not Entirely You Anymore"}
+];
+
+/* ---------- state ---------- */
+let state=null;
+let travelTimer=null;
+
+function freshState(){
+  return {
+    occIdx:0, cash:0, mult:1, month:2,
+    party:[], // {name,health,illness,alive}
+    inv:{food:0, oxen:0, clothes:0, ammo:0, wheels:0, axles:0, tongues:0, medicine:0},
+    pace:"steady", rations:"filling",
+    distance:0, day:0, landmarkIdx:1,
+    traveling:false, modalOpen:false, gameOver:false,
+    huntPool:0, huntUsed:0, huntMeat:0
+  };
+}
+
+/* ---------- utils ---------- */
+function rand(a,b){return Math.random()*(b-a)+a;}
+function ri(a,b){return Math.floor(rand(a,b+1));}
+function pick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function money(n){return "$"+n.toFixed(2);}
+function statusOf(h){
+  if(h<=0)return {label:"Dead",cls:"st-dead"};
+  if(h<20)return {label:"Critical",cls:"st-crit"};
+  if(h<40)return {label:"Very Poor",cls:"st-vpoor"};
+  if(h<60)return {label:"Poor",cls:"st-poor"};
+  if(h<80)return {label:"Fair",cls:"st-fair"};
+  return {label:"Good",cls:"st-good"};
+}
+function dateStr(){
+  const monthNames=["Mar","Apr","May","Jun","Jul","Aug","Sep","Oct"];
+  const startIdx=state.month;
+  const totalDay=state.day;
+  const mIdx=startIdx+Math.floor(totalDay/28);
+  const d=(totalDay%28)+1;
+  return (monthNames[mIdx]||"Late")+" "+d;
+}
+function log(msg){
+  const el=document.getElementById("log");
+  const line=document.createElement("div");
+  line.className="line";
+  line.innerHTML='<span class="day">Day '+state.day+'</span> — '+msg;
+  el.appendChild(line);
+  el.scrollTop=el.scrollHeight;
+}
+
+/* ---------- screens ---------- */
+function show(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function goSetup(){
+  state=freshState();
+  show("screen-setup");
+  renderOcc();
+  renderNames();
+  renderMonths();
+}
+
+function renderOcc(){
+  const wrap=document.getElementById("occList");
+  wrap.innerHTML="";
+  OCCUPATIONS.forEach((o,i)=>{
+    const d=document.createElement("div");
+    d.className="card occ"+(i===state.occIdx?" selected":"");
+    d.innerHTML="<b>"+o.name+"</b> — "+money(o.cash)+", "+o.mult+"x score<br><span class='flavor'>"+o.blurb+"</span>";
+    d.onclick=()=>{state.occIdx=i; renderOcc();};
+    wrap.appendChild(d);
+  });
+}
+function renderNames(){
+  const wrap=document.getElementById("nameGrid");
+  wrap.innerHTML="";
+  for(let i=0;i<5;i++){
+    const d=document.createElement("div");
+    const val=DEFAULT_NAMES[i];
+    d.innerHTML='<label>Member '+(i+1)+'</label><input type="text" id="pname'+i+'" value="'+val+'">';
+    wrap.appendChild(d);
+  }
+}
+function renderMonths(){
+  const wrap=document.getElementById("monthList");
+  wrap.innerHTML="";
+  MONTHS.forEach((m,i)=>{
+    const b=document.createElement("button");
+    b.textContent=m.name;
+    if(i===state.month) b.classList.add("primary");
+    b.onclick=()=>{state.month=i; renderMonths();};
+    wrap.appendChild(b);
+  });
+  document.getElementById("monthBlurb").textContent=MONTHS[state.month].blurb;
+}
+
+/* ---------- store ---------- */
+const BASE_PRICES={food:.25, clothes:10, ammo:2, oxen:40, wheels:10, axles:10, tongues:10, medicine:6};
+let priceMult=1;
+function price(k){return Math.round(BASE_PRICES[k]*priceMult*100)/100;}
+let storeCtx="initial";
+let fortLandmark=null;
+function goStore(fromSetup){
+  if(fromSetup){
+    for(let i=0;i<5;i++){
+      const v=document.getElementById("pname"+i).value.trim();
+      state.party.push({name:v||DEFAULT_NAMES[i], health:100, illness:null, alive:true});
+    }
+    const occ=OCCUPATIONS[state.occIdx];
+    state.cash=occ.cash; state.mult=occ.mult;
+    storeCtx="initial";
+    document.getElementById("storeTitle").textContent="Outfitting at the Hollow";
+    document.getElementById("storeBlurb").textContent="Spend what you have. You will not be able to buy oxen again once the mud starts.";
+    document.getElementById("storeContext").textContent="";
+  }
+  show("screen-store");
+  renderStore();
+}
+function renderStore(){
+  document.getElementById("storeCash").textContent=money(state.cash);
+  const rows=[
+    ["oxen","Oxen (semi-loyal)","each"],
+    ["food","Food","lb"],
+    ["clothes","Clothing","set"],
+    ["ammo","Ammunition","box of 20"],
+    ["wheels","Spare Wheel","each"],
+    ["axles","Spare Axle","each"],
+    ["tongues","Spare Tongue","each"],
+    ["medicine","Grave-Dirt Charm","each"]
+  ];
+  let html="<tr><th>Item</th><th>Price</th><th>Owned</th><th></th></tr>";
+  rows.forEach(([k,label,unit])=>{
+    html+="<tr><td>"+label+"<br><small class='hint'>"+unit+" — "+money(price(k))+"</small></td>"+
+      "<td>"+money(price(k))+"</td>"+
+      "<td id='own-"+k+"'>"+state.inv[k]+"</td>"+
+      "<td><div class='row'>"+
+        "<button onclick=\"buy('"+k+"',1)\">+1</button>"+
+        "<button onclick=\"buy('"+k+"',10)\">+10</button>"+
+        "<button onclick=\"buy('"+k+"',-1)\">-1</button>"+
+      "</div></td></tr>";
+  });
+  document.getElementById("storeTable").innerHTML=html;
+  const warn=[];
+  if(state.inv.oxen<2) warn.push("You own fewer than two oxen. The wagon will not care that this was your choice.");
+  if(state.inv.food<200) warn.push("Under 200 lb of food. Hunger keeps its own ledger.");
+  document.getElementById("storeWarn").textContent=warn.join(" ");
+}
+function buy(k,n){
+  const p=price(k);
+  if(n>0){
+    const cost=p*n;
+    if(cost>state.cash) return;
+    state.cash-=cost; state.inv[k]+=n;
+  } else {
+    if(state.inv[k]<=0) return;
+    state.inv[k]+=n; state.cash+=p*(-n);
+  }
+  renderStore();
+}
+function finishStore(){
+  if(storeCtx==="fort"){
+    priceMult=1;
+    const lm=fortLandmark; fortLandmark=null;
+    document.getElementById("storeDoneBtn").textContent="Take to the Road";
+    show("screen-travel");
+    advancePastLandmark(lm.name);
+  } else {
+    if(state.inv.food<100 || state.inv.oxen<2){
+      const issues=[];
+      if(state.inv.food<100) issues.push("barely any food is packed");
+      if(state.inv.oxen<2) issues.push("fewer than two oxen stand ready");
+      openModal("Before You Go","<p class='flavor'>Right now, "+issues.join(" and ")+". The road will not care that this was an oversight.</p>",
+        [{label:"Go Back"},{label:"Depart Anyway",primary:true,onClick:()=>startTravel_init()}]);
+    } else {
+      startTravel_init();
+    }
+  }
+}
+function startTravel_init(){
+  show("screen-travel");
+  renderTravel();
+  openModal("Before the Wagon Moves",
+    "<p>This ground is not empty, and has not been for a very long time. Just a few years before this ledger opens, the United States forced tens of thousands of Cherokee, Muscogee, Choctaw, Chickasaw, and Seminole people from their homelands in the removals now called the Trail of Tears — thousands died on the march. The road ahead runs through the homelands of the Kansa, Pawnee, Osage, Shoshone, Cayuse, and other nations, bound by treaties the United States would not keep for long. None of that is a story this ledger can joke its way past. It is simply what is true before a single mile is walked.</p>",
+    [{label:"Begin the Ledger",primary:true,onClick:()=>{
+      log("The purse is "+money(state.cash)+". The oxen have already decided they resent this.");
+    }}]
+  );
+}
+
+/* ---------- travel rendering ---------- */
+let activePanel=null;
+function renderTravel(){
+  document.getElementById("dateLine").textContent=dateStr();
+  document.getElementById("distLine").textContent=Math.round(state.distance)+" / "+LANDMARKS[LANDMARKS.length-1].dist+" mi";
+  const total=LANDMARKS[LANDMARKS.length-1].dist;
+  document.getElementById("progressBar").style.width=Math.min(100,state.distance/total*100)+"%";
+  document.getElementById("weatherLine").textContent=weatherLabel();
+  document.getElementById("conditionLine").textContent=partyDigest();
+  document.getElementById("huntBtn").disabled = state.traveling || aliveCount()===0;
+  if(activePanel==="party") document.getElementById("modal-body").innerHTML=buildPartyHTML();
+  if(activePanel==="supplies") document.getElementById("modal-body").innerHTML=buildSuppliesHTML();
+}
+function aliveCount(){return state.party.filter(p=>p.alive).length;}
+function partyDigest(){
+  const alive=state.party.filter(p=>p.alive);
+  if(alive.length===0) return "no one left";
+  const worst=alive.reduce((w,p)=>(p.health<w.health?p:w));
+  const sick=alive.filter(p=>p.illness).length;
+  return alive.length+"/5 alive, worst "+statusOf(worst.health).label.toLowerCase()+(sick?", "+sick+" ailing":"");
+}
+function weatherLabel(){
+  const idx=state.landmarkIdx;
+  if(idx>=14 && state.month>=3) return "cold, worsening";
+  if(idx>=14) return "cold";
+  if(state.month<=1) return "wet mud";
+  return "clear";
+}
+function buildPartyHTML(){
+  let rows="<table><tr><th>Name</th><th>Condition</th><th>Ailment</th><th></th></tr>";
+  state.party.forEach((p,i)=>{
+    const st=statusOf(p.health);
+    rows+="<tr class='"+(p.alive?"":"dead-row")+"'><td>"+(p.alive?"":"<span class='dagger'>†</span>")+p.name+"</td>"+
+      "<td><div class='bar "+st.cls+"'><i style='width:"+Math.max(0,p.health)+"%'></i></div><small class='hint'>"+st.label+"</small></td>"+
+      "<td>"+(p.illness?p.illness:"—")+"</td>"+
+      "<td>"+((p.alive&&p.illness&&state.inv.medicine>0)?"<button onclick='treat("+i+")'>Treat</button>":"")+"</td></tr>";
+  });
+  return rows+"</table>";
+}
+function buildSuppliesHTML(){
+  return "<div class='tally'>"+
+    "<div><span>Food</span><b>"+Math.round(state.inv.food)+" lb</b></div>"+
+    "<div><span>Oxen</span><b>"+state.inv.oxen+"</b></div>"+
+    "<div><span>Ammunition</span><b>"+state.inv.ammo+" box</b></div>"+
+    "<div><span>Clothing</span><b>"+state.inv.clothes+" set</b></div>"+
+    "<div><span>Spare parts</span><b>"+(state.inv.wheels+state.inv.axles+state.inv.tongues)+"</b></div>"+
+    "<div><span>Grave-Dirt Charms</span><b>"+state.inv.medicine+"</b></div>"+
+    "<div><span>Purse</span><b>"+money(state.cash)+"</b></div>"+
+  "</div>";
+}
+function buildMapHTML(){
+  let html="<div style='display:flex;flex-direction:column;gap:.3rem;'>";
+  LANDMARKS.forEach((lm,i)=>{
+    if(lm.type==="start") return;
+    const marker = i<state.landmarkIdx?"&#10003;":(i===state.landmarkIdx?"&#9654;":"&middot;");
+    const style = i===state.landmarkIdx?" style='color:var(--fg-bright);font-weight:700;'":"";
+    html+="<div"+style+">"+marker+" "+lm.name+" <span style='float:right;opacity:.7;'>"+lm.dist+" mi</span></div>";
+  });
+  return html+"</div>";
+}
+function buildPaceHTML(){
+  const paceOpts=[["steady","Steady"],["strenuous","Strenuous"],["relentless","Relentless"]];
+  const rationOpts=[["filling","Filling"],["meager","Meager"],["bonebare","Bone-Bare"]];
+  return "<div class='row'>"+
+    "<div style='flex:1;'><label>Pace</label><select onchange='state.pace=this.value'>"+
+    paceOpts.map(([v,l])=>"<option value='"+v+"' "+(state.pace===v?"selected":"")+">"+l+"</option>").join("")+
+    "</select></div>"+
+    "<div style='flex:1;'><label>Rations</label><select onchange='state.rations=this.value'>"+
+    rationOpts.map(([v,l])=>"<option value='"+v+"' "+(state.rations===v?"selected":"")+">"+l+"</option>").join("")+
+    "</select></div></div>";
+}
+function openSuppliesPanel(){
+  activePanel="supplies";
+  openModal("Supplies",buildSuppliesHTML(),[{label:"Back",primary:true,onClick:()=>{activePanel=null;}}]);
+}
+function openPartyPanel(){
+  activePanel="party";
+  openModal("The Party",buildPartyHTML(),[{label:"Back",primary:true,onClick:()=>{activePanel=null;}}]);
+}
+function openMapPanel(){
+  activePanel="map";
+  openModal("Trail Map",buildMapHTML(),[{label:"Back",primary:true,onClick:()=>{activePanel=null;}}]);
+}
+function openPacePanel(){
+  activePanel="pace";
+  openModal("Pace &amp; Rations",buildPaceHTML(),[{label:"Done",primary:true,onClick:()=>{activePanel=null;}}]);
+}
+function treat(i){
+  const p=state.party[i];
+  if(state.inv.medicine<=0 || !p.illness) return;
+  state.inv.medicine--;
+  log(p.name+"'s "+p.illness+" is treated with a grave-dirt charm. The shaking stops. "+p.name+" will not discuss what they saw.");
+  p.illness=null;
+  p.health=Math.min(100,p.health+15);
+  renderTravel();
+}
+
+/* ---------- modal (queued, so simultaneous events never clobber each other) ---------- */
+let modalQueue=[];
+function openModal(title,bodyHtml,buttons){
+  modalQueue.push({title,bodyHtml,buttons});
+  if(!state.modalOpen) showNextModal();
+}
+function showNextModal(){
+  if(modalQueue.length===0){
+    state.modalOpen=false;
+    document.getElementById("overlay").classList.remove("active");
+    renderTravel();
+    return;
+  }
+  stopTravel();
+  state.modalOpen=true;
+  const {title,bodyHtml,buttons}=modalQueue.shift();
+  document.getElementById("modal-title").textContent=title;
+  document.getElementById("modal-body").innerHTML=bodyHtml;
+  const bw=document.getElementById("modal-buttons");
+  bw.innerHTML="";
+  buttons.forEach(b=>{
+    const el=document.createElement("button");
+    el.textContent=b.label;
+    if(b.primary) el.classList.add("primary");
+    el.onclick=()=>{ b.onClick&&b.onClick(); showNextModal(); };
+    bw.appendChild(el);
+  });
+  document.getElementById("overlay").classList.add("active");
+}
+
+/* ---------- travel loop ---------- */
+function toggleTravel(){
+  if(state.traveling) stopTravel(); else startTravelLoop();
+}
+function startTravelLoop(){
+  if(state.gameOver||state.modalOpen||aliveCount()===0) return;
+  state.traveling=true;
+  document.getElementById("travelBtn").textContent="Halt the Wagon";
+  document.getElementById("huntBtn").disabled=true;
+  travelTimer=setInterval(tick,380);
+}
+function stopTravel(){
+  state.traveling=false;
+  clearInterval(travelTimer);
+  const btn=document.getElementById("travelBtn");
+  if(btn) btn.textContent="1. Continue on the Trail";
+  renderTravel();
+}
+function tick(){
+  if(state.modalOpen||state.gameOver){stopTravel();return;}
+  advanceOneDay();
+  renderTravel();
+  if(state.modalOpen||state.gameOver||aliveCount()===0) stopTravel();
+}
+
+const PACE={steady:[13,18], strenuous:[17,23], relentless:[21,29]};
+const RATION={filling:3, meager:2, bonebare:1};
+
+function advanceOneDay(){
+  state.day++;
+  let [lo,hi]=PACE[state.pace];
+  if(state.landmarkIdx>=14) {lo-=5; hi-=6;}
+  let miles=Math.max(2,ri(lo,hi));
+
+  const nextLm=LANDMARKS[state.landmarkIdx];
+  let arrived=false;
+  if(state.distance+miles>=nextLm.dist){
+    miles=nextLm.dist-state.distance;
+    arrived=true;
+  }
+  state.distance+=miles;
+
+  const need=RATION[state.rations]*aliveCount();
+  const hadFood=state.inv.food>0;
+  state.inv.food-=need;
+  if(state.inv.food<=0){
+    const justRanOut=hadFood;
+    state.inv.food=0;
+    state.party.forEach(p=>{if(p.alive){p.health-=ri(6,12);}});
+    if(justRanOut){
+      log("The last of the food is gone. The wagon is quiet in a way that is hard to describe.");
+      checkDeaths();
+      openModal("Empty Stores","<p class='flavor'>There is nothing left to eat. Hunting, or the shelves of the next fort, are the only way back from this — the road will not wait for a plan.</p>",[{label:"Press On",primary:true}]);
+    } else {
+      checkDeaths();
+    }
+  }
+
+  rollIllness();
+  rollEvent();
+
+  if(arrived){
+    handleLandmark(nextLm);
+  }
+  if(state.distance>=LANDMARKS[LANDMARKS.length-1].dist){
+    endGame(true);
+  }
+}
+
+function rollIllness(){
+  let chance=0.05;
+  if(state.rations==="bonebare") chance+=0.09;
+  if(state.rations==="meager") chance+=0.04;
+  if(state.pace==="relentless") chance+=0.05;
+  if(state.inv.food<=0) chance+=0.12;
+  state.party.forEach(p=>{
+    if(!p.alive) return;
+    if(p.illness){
+      const def=ILLNESSES.find(i=>i.name===p.illness);
+      p.health-=def.dmg;
+      if(Math.random()<def.recover){
+        log(p.name+" shakes off "+p.illness+". Whatever it was, it has moved on to someone else's ledger.");
+        p.illness=null;
+      }
+    } else if(Math.random()<chance){
+      const def=pick(ILLNESSES);
+      p.illness=def.name;
+      p.health-=Math.floor(def.dmg/2);
+      log(p.name+" has come down with "+def.name+".");
+    }
+  });
+  checkDeaths();
+}
+
+function checkDeaths(){
+  state.party.forEach(p=>{
+    if(p.alive && p.health<=0){
+      p.alive=false; p.health=0;
+      const cause=p.illness||"the road itself";
+      p.illness=null;
+      const epi=pick(EPITAPHS).replace(/{n}/g,p.name).replace(/{c}/g,cause);
+      openModal("† "+p.name,"<p>"+epi+"</p>",[{label:"Close the Entry",primary:true,onClick:()=>{
+        if(aliveCount()===0) endGame(false);
+      }}]);
+    }
+  });
+}
+
+const EVENTS=[
+  {w:10,f:()=>{
+    if(state.inv.wheels>0){ state.inv.wheels--; return "A wheel splits on ground that was, by any account, flat. A spare replaces it before nightfall."; }
+    state.day++;
+    return "A wheel splits and there is no spare to replace it. A full day is lost fashioning something that will have to do.";
+  }},
+  {w:8,f:()=>{return "The axle groans all night in a voice that is almost words.";}},
+  {w:8,f:()=>{const lost=ri(5,20); state.inv.food=Math.max(0,state.inv.food-lost); return "An ox wanders off and returns without having eaten anything, staring at the middle distance. "+lost+" lb of food spoils overnight regardless.";}},
+  {w:6,f:()=>{if(state.inv.oxen>1){state.inv.oxen--; return "An ox lies down and does not get up. No wound. No cause. One less ox.";} return "An ox lies down, then, after a long moment, gets back up.";}},
+  {w:8,f:()=>{const lost=Math.min(state.cash,ri(5,25)); state.cash-=lost; return "Something goes through the supplies in the night and leaves "+money(lost)+" in its place, as if in trade.";}},
+  {w:7,f:()=>{return "A heavy fog sits on the trail. Somewhere inside it, someone calls a name that is almost, but not quite, one of the party's.";}},
+  {w:6,f:()=>{const gained=ri(10,40); state.inv.food+=gained; return "An abandoned wagon is found, its provisions untouched. A note inside is signed with a name from the party — nobody admits to writing it. "+gained+" lb of food taken.";}},
+  {w:5,f:()=>{const p=pick(state.party.filter(m=>m.alive)); if(p){p.health-=10; return p.name+" is startled by their own reflection in a puddle. It didn't blink in time.";} return "Nothing of note, for once.";}},
+  {w:4,f:()=>{state.inv.medicine+=1; return "A charm is found tied to a fencepost. It hums faintly. Kept, for later.";}},
+  {w:4,f:()=>{return "Crows follow the wagon for three miles exactly, then peel off all at once.";}}
+];
+function rollEvent(){
+  if(Math.random()>0.16) return;
+  let total=EVENTS.reduce((s,e)=>s+e.w,0);
+  let r=Math.random()*total;
+  for(const e of EVENTS){
+    if(r<e.w){ log(e.f()); return; }
+    r-=e.w;
+  }
+}
+
+/* ---------- landmarks ---------- */
+function handleLandmark(lm){
+  if(lm.type==="river") openRiver(lm);
+  else if(lm.type==="fort") openFort(lm);
+  else if(lm.type==="landmark") openLandmarkFlavor(lm);
+  else if(lm.type==="history") openHistoryModal(lm);
+}
+function openHistoryModal(lm){
+  openModal(lm.name,"<p>"+lm.history+"</p>",[
+    {label:"Continue",primary:true,onClick:()=>advancePastLandmark(lm.name)}
+  ]);
+}
+function advancePastLandmark(name){
+  state.landmarkIdx++;
+  log("Leaving "+name+" behind.");
+  renderTravel();
+}
+function openLandmarkFlavor(lm){
+  openModal(lm.name,"<p class='flavor'>"+lm.flavor+"</p>",[
+    {label:"Move On",primary:true,onClick:()=>advancePastLandmark(lm.name)}
+  ]);
+}
+function openRiver(lm){
+  const depth=pick(["shallow","middling","deep"]);
+  const current=pick(["slow","brisk","violent"]);
+  openModal(lm.name,
+    "<p class='flavor'>The water runs "+depth+" and "+current+". It does not look eager to let go of anything it takes.</p>",
+    [
+      {label:"Ford It",onClick:()=>resolveCrossing(lm,"ford",depth,current)},
+      {label:"Caulk & Float",onClick:()=>resolveCrossing(lm,"float",depth,current)},
+      {label:"Pay the Ferry ("+money(12)+")",onClick:()=>resolveCrossing(lm,"ferry",depth,current)},
+      {label:"Wait a Day",onClick:()=>resolveCrossing(lm,"wait",depth,current)}
+    ]
+  );
+}
+function resolveCrossing(lm,choice,depth,current){
+  let msg="";
+  let riskDepth={shallow:0.1,middling:0.3,deep:0.55}[depth];
+  let riskCurrent={slow:0,brisk:0.15,violent:0.3}[current];
+  if(choice==="wait"){
+    state.day++;
+    msg="A day is spent watching the water. It does not seem to change its mind, but the choice feels safer now.";
+    log(msg);
+    openRiver(lm);
+    return;
+  }
+  if(choice==="ferry"){
+    if(state.cash>=12){
+      state.cash-=12;
+      msg="The ferryman does not speak the whole crossing, and does not ask for names. Safe passage.";
+    } else {
+      msg="There isn't enough in the purse for the ferry. The river will have to be dealt with directly.";
+      openModal(lm.name,"<p class='flavor'>"+msg+"</p>",[{label:"Choose Again",primary:true,onClick:()=>openRiver(lm)}]);
+      return;
+    }
+  } else {
+    let risk=riskDepth+riskCurrent-(choice==="float"?0.12:0);
+    if(Math.random()<risk){
+      const lostFood=Math.round(state.inv.food*rand(.15,.4));
+      state.inv.food-=lostFood;
+      const p=pick(state.party.filter(m=>m.alive));
+      if(p) p.health-=ri(10,25);
+      msg="The crossing goes wrong. "+lostFood+" lb of food is lost to the current, and "+(p?p.name:"the party")+" comes up gasping, having seen something under the surface that kept still until it wasn't.";
+    } else {
+      msg=choice==="ford"?"The ford is cold and uneventful. The wagon creaks across without complaint.":
+        "The wagon floats across on caulked boards, turning slowly, as though the river is looking it over.";
+    }
+  }
+  log(msg);
+  checkDeaths();
+  openModal(lm.name,"<p class='flavor'>"+msg+"</p>",[{label:"Continue",primary:true,onClick:()=>advancePastLandmark(lm.name)}]);
+}
+const FORT_RUMORS={
+  "Fort Laramie":"Talk at the fort is all Kit Carson — Frémont's reports have made him famous back east, a guide and scout dressed up as a folk hero. Nobody around the fire wants the part of the story where fame like that gets built on burned villages and starved winters. They just want the part with the buckskin and the rifle.",
+  "Fort Bridger":"The fort's namesake, Jim Bridger, is said to be close by — a trader and teller of tall tales who married into the Shoshone and Ute families whose land this post now sits on, and who profits from every wagon that follows this road through it. Nobody at the fire can quite decide if that makes him a friend to the people here or the machinery of their dispossession wearing a friendlier face. Possibly both. The ledger declines to resolve it for you.",
+  "Fort Boise":"A trapper passing through tells of a mountain man out east called 'Liver-Eating' Johnston — the story goes he ate the livers of Crow warriors killed in a long, real war of revenge that lasted the better part of two decades. How much of the liver-eating is embellishment and how much is Johnston's own bragging is genuinely disputed; the killing war itself is not. The men around the fire repeat the goriest version like it's a compliment. That part isn't disputed at all."
+};
+function openFort(lm){
+  storeCtx="fort";
+  fortLandmark=lm;
+  priceMult=1.4;
+  document.getElementById("storeTitle").textContent=lm.name;
+  document.getElementById("storeBlurb").textContent="The trader here prices things for travelers who have no choice but to pay.";
+  document.getElementById("storeContext").textContent="(fort prices, +40%)";
+  show("screen-store");
+  renderStore();
+  document.getElementById("storeDoneBtn").textContent="Depart "+lm.name;
+  if(FORT_RUMORS[lm.name]) log(FORT_RUMORS[lm.name]);
+}
+
+/* ---------- hunting ---------- */
+let huntCtx=null;
+let huntHistoryShown=false;
+function goHunt(){
+  if(state.traveling||aliveCount()===0) return;
+  if(!huntHistoryShown){
+    huntHistoryShown=true;
+    openModal("Before the Shot",
+      "<p>What the party hunts here for a meal, the United States Army later hunted on purpose, at industrial scale — officers openly encouraged the slaughter of bison herds specifically to starve the Plains nations who depended on them into surrender. General Philip Sheridan told the Texas legislature in 1875 that killing the buffalo would solve ‘the Indian problem’ for good. Tens of millions of animals were destroyed within a few decades. That policy, not bad luck or a poor season, is why the plains went quiet.</p>",
+      [{label:"Take Up the Rifle",primary:true,onClick:()=>beginHunt()}]
+    );
+    return;
+  }
+  beginHunt();
+}
+function beginHunt(){
+  state.huntPool=Math.min(state.inv.ammo*20,60);
+  state.huntUsed=0;
+  state.huntMeat=0;
+  show("screen-hunt");
+  const canvas=document.getElementById("huntCanvas");
+  const ctx=canvas.getContext("2d");
+  huntCtx={canvas,ctx,critters:[],timeLeft:30,spawnTimer:0,running:true};
+  document.getElementById("huntFlavor").textContent = state.huntPool>0 ?
+    "Something moves at the treeline. It is not always what it looks like." :
+    "There is no ammunition left to bring. The field is watched from a safe distance instead.";
+  updateHuntStats();
+  canvas.onclick=(e)=>{
+    if(!huntCtx.running) return;
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left)*(canvas.width/rect.width);
+    const y=(e.clientY-rect.top)*(canvas.height/rect.height);
+    shootAt(x,y);
+  };
+  huntCtx.interval=setInterval(huntTick,1000);
+  requestAnimationFrame(huntFrame);
+}
+const CRITTERS=[
+  {key:"rabbit",label:"three-eyed rabbit",emoji:"\u{1F407}",meat:[5,10],size:26,speed:[1.2,2.4],w:6},
+  {key:"deer",label:"skinwalker deer",emoji:"\u{1F98C}",meat:[28,55],size:40,speed:[1.6,3],w:3},
+  {key:"crow",label:"oracle crow",emoji:"\u{1F426}",meat:[1,3],size:20,speed:[2.4,4],w:4}
+];
+function spawnCritter(){
+  const def=pick(CRITTERS.flatMap(c=>Array(c.w).fill(c)));
+  const dir=Math.random()<0.5?1:-1;
+  huntCtx.critters.push({
+    def, x:dir===1?-30:huntCtx.canvas.width+30, y:ri(30,huntCtx.canvas.height-30),
+    vx:dir*rand(def.speed[0],def.speed[1]), alive:true
+  });
+}
+function huntFrame(){
+  if(!huntCtx||!huntCtx.running) return;
+  const {ctx,canvas}=huntCtx;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel');
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  huntCtx.spawnTimer++;
+  if(huntCtx.spawnTimer>45 && huntCtx.critters.length<6){huntCtx.spawnTimer=0; spawnCritter();}
+  huntCtx.critters.forEach(c=>{
+    c.x+=c.vx;
+    ctx.font=(c.def.size)+"px serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.save();
+    if(c.vx>0){ctx.translate(c.x,c.y); ctx.scale(-1,1); ctx.fillText(c.def.emoji,0,0);}
+    else{ctx.fillText(c.def.emoji,c.x,c.y);}
+    ctx.restore();
+  });
+  huntCtx.critters=huntCtx.critters.filter(c=>c.x>-50 && c.x<canvas.width+50);
+  requestAnimationFrame(huntFrame);
+}
+function shootAt(x,y){
+  if(state.huntUsed>=state.huntPool){ return; }
+  state.huntUsed++;
+  let hit=null,bestD=9999;
+  huntCtx.critters.forEach(c=>{
+    const d=Math.hypot(c.x-x,c.y-y);
+    if(d<c.def.size && d<bestD){hit=c; bestD=d;}
+  });
+  if(hit){
+    const m=ri(hit.def.meat[0],hit.def.meat[1]);
+    state.huntMeat=Math.min(100,state.huntMeat+m);
+    huntCtx.critters=huntCtx.critters.filter(c=>c!==hit);
+  }
+  updateHuntStats();
+  if(state.huntUsed>=state.huntPool) checkHuntEnd();
+}
+function updateHuntStats(){
+  document.getElementById("huntAmmo").textContent=(state.huntPool-state.huntUsed)+"/"+state.huntPool;
+  document.getElementById("huntMeat").textContent=Math.round(state.huntMeat);
+  document.getElementById("huntTime").textContent=huntCtx?huntCtx.timeLeft:30;
+}
+function huntTick(){
+  huntCtx.timeLeft--;
+  updateHuntStats();
+  if(huntCtx.timeLeft<=0) checkHuntEnd();
+}
+function checkHuntEnd(){
+  if(huntCtx && huntCtx.running) endHunt(false);
+}
+function endHunt(manual){
+  if(!huntCtx||!huntCtx.running) return;
+  huntCtx.running=false;
+  clearInterval(huntCtx.interval);
+  const ammoBoxesUsed=Math.ceil(state.huntUsed/20)||0;
+  state.inv.ammo=Math.max(0,state.inv.ammo-ammoBoxesUsed);
+  state.inv.food+=state.huntMeat;
+  state.day++;
+  const need=RATION[state.rations]*aliveCount();
+  state.inv.food=Math.max(0,state.inv.food-need);
+  log("A day spent hunting brings back "+Math.round(state.huntMeat)+" lb of meat, none of it quite the color it should be.");
+  show("screen-travel");
+  renderTravel();
+}
+
+/* ---------- end game ---------- */
+function endGame(won){
+  state.gameOver=true;
+  stopTravel();
+  show("screen-end");
+  const alive=aliveCount();
+  const score=Math.round((alive*500 + state.cash + state.inv.food*.25 + state.inv.oxen*40 + state.inv.wheels*10+state.inv.axles*10+state.inv.tongues*10 + state.inv.medicine*6) * state.mult);
+  const rank=RANKS.find(r=>score>=r.min);
+  if(won){
+    document.getElementById("endTitle").textContent="The Bloom";
+    document.getElementById("endFlavor").textContent=alive>0?
+      "The valley opens up, green and unbothered, as if it hadn't heard a word about any of this.":
+      "The wagon arrives. Nobody is left to see it. It parks itself, more or less.";
+    document.getElementById("endHistory").textContent=
+      "The valley this ledger calls 'the Bloom' was, and remains, Kalapuya land — dozens of distinct bands who had lived there for thousands of years. Within a decade of wagons like this one arriving, introduced disease and land seizure had killed or displaced the overwhelming majority of the Kalapuya population. In 1855 the survivors were forced by treaty onto the Grand Ronde reservation, opening the valley for exactly the kind of settlement this ledger just finished recording as a happy ending. It was not a happy ending for everyone who was already home.";
+  } else {
+    document.getElementById("endTitle").textContent="The Ledger Closes";
+    document.getElementById("endFlavor").textContent="The last entry is written in a hand that is trying very hard to still look like yours.";
+    document.getElementById("endHistory").textContent="";
+  }
+  document.getElementById("endTally").innerHTML=
+    "<div><span>Survivors</span><b>"+alive+" / 5</b></div>"+
+    "<div><span>Purse</span><b>"+money(state.cash)+"</b></div>"+
+    "<div><span>Food remaining</span><b>"+Math.round(state.inv.food)+" lb</b></div>"+
+    "<div><span>Score</span><b>"+score+"</b></div>";
+  document.getElementById("endRank").textContent=rank.label;
+}
+</script>
+</body>
+</html>
